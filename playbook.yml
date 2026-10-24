@@ -1,0 +1,48 @@
+- name: Prepare and mount backup disk on backup VM
+  hosts: backup
+  become: true
+  vars:
+    mount_point: /data
+    disk_device: /dev/sdb  # можно позже сделать динамическим по размеру
+
+  tasks:
+    # Тег: parted — разметка диска (GPT + 1 раздел)
+    - name: Create GPT partition on disk
+      community.general.parted:
+        device: "{{ disk_device }}"
+        label: gpt
+        number: 1
+        state: present
+      register: parted_result
+      changed_when: parted_result.changed
+      tags:
+        - parted
+
+    # Тег: filesystem — создание файловой системы (ext4)
+    - name: Create ext4 filesystem on partition
+      filesystem:
+        fstype: ext4
+        dev: "{{ disk_device }}1"
+      tags:
+        - filesystem
+
+    # Тег: dir — создание точки монтирования
+    - name: Ensure mount directory exists
+      file:
+        path: "{{ mount_point }}"
+        state: directory
+        mode: "0755"
+      tags:
+        - dir
+
+    # Теги: mount + fstab — монтирование и запись в fstab
+    - name: Mount filesystem
+      mount:
+        path: "{{ mount_point }}"
+        src: "{{ disk_device }}1"
+        fstype: ext4
+        opts: defaults
+        state: mounted
+      tags:
+        - mount
+        - fstab
